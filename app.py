@@ -185,6 +185,12 @@ def health():
     return jsonify({'status': 'ok'})
 
 
+@app.route('/api/openid', methods=['GET'])
+def get_openid():
+    openid = request.headers.get('X-WX-OPENID', '')
+    return jsonify({'openid': openid})
+
+
 @app.route('/admin')
 def admin_page():
     conn = get_db()
