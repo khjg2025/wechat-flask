@@ -2,28 +2,35 @@ from flask import Flask, request, jsonify
 import pymysql
 from datetime import datetime
 import os
-import sys
 import random
 import string
+import json
 
 app = Flask(__name__)
 
-DB_CONFIG = {
-    'host': os.environ.get('MYSQL_HOST', '10.13.103.5'),
-    'port': int(os.environ.get('MYSQL_PORT', 3306)),
-    'user': os.environ.get('MYSQL_USER', 'root'),
-    'password': os.environ.get('MYSQL_PASSWORD', 'VdhQ2XpY'),
-    'database': os.environ.get('MYSQL_DB', 'shop'),
-    'charset': 'utf8mb4'
-}
+DB_HOST = os.environ.get('MYSQL_HOST', '10.13.103.5')
+DB_PORT = int(os.environ.get('MYSQL_PORT', 3306))
+DB_USER = os.environ.get('MYSQL_USER', 'root')
+DB_PASS = os.environ.get('MYSQL_PASSWORD', 'VdhQ2XpY')
+DB_NAME = os.environ.get('MYSQL_DB', 'shop')
 
 
 def get_db():
-    return pymysql.connect(**DB_CONFIG)
+    return pymysql.connect(host=DB_HOST, port=DB_PORT, user=DB_USER,
+                           password=DB_PASS, database=DB_NAME, charset='utf8mb4')
 
 
 def init_db():
     try:
+        conn = pymysql.connect(host=DB_HOST, port=DB_PORT, user=DB_USER,
+                               password=DB_PASS, charset='utf8mb4')
+        cursor = conn.cursor()
+        cursor.execute(f'CREATE DATABASE IF NOT EXISTS `{DB_NAME}` DEFAULT CHARACTER SET utf8mb4')
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print(f'数据库 {DB_NAME} 就绪')
+
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute('''
@@ -49,9 +56,9 @@ def init_db():
         conn.commit()
         cursor.close()
         conn.close()
-        print('数据库初始化成功')
+        print('数据表 orders 就绪')
     except Exception as e:
-        print(f'数据库连接失败: {e}')
+        print(f'数据库初始化失败: {e}')
 
 
 def generate_order_no():
@@ -70,14 +77,12 @@ def create_order():
         conn = get_db()
         cursor = conn.cursor()
         order_no = generate_order_no()
-        import json
         cursor.execute('''
-            INSERT INTO orders (openid, order_no, products, total_price, delivery_fee, 
+            INSERT INTO orders (openid, order_no, products, total_price, delivery_fee,
                 final_price, total_weight, user_name, phone, address, door_number, remark, status)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
-            openid,
-            order_no,
+            openid, order_no,
             json.dumps(order_data.get('products', []), ensure_ascii=False),
             order_data.get('totalPrice', 0),
             order_data.get('deliveryFee', 0),
@@ -107,8 +112,7 @@ def get_orders():
 
     try:
         conn = get_db()
-        cursor = pymysql.cursors.DictCursor
-        cursor = conn.cursor(cursor)
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
 
         where = ''
         params = []
@@ -125,7 +129,6 @@ def get_orders():
         cursor.execute(f'SELECT * FROM orders {where} ORDER BY create_time DESC LIMIT %s, %s', params_for_query)
         rows = cursor.fetchall()
 
-        import json
         orders = []
         for row in rows:
             row['id'] = str(row['id'])
@@ -178,4 +181,5 @@ def health():
 
 if __name__ == '__main__':
     init_db()
-    app.run(host=sys.argv[1], port=int(sys.argv[2]), debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
