@@ -232,20 +232,17 @@ def admin_page():
         products_str = '<br>'.join([f"{p['name']} x{p['count']}" for p in o['products']])
         tracking_html = f'<br><small>物流单号: {o["tracking_no"]}</small>' if o.get('tracking_no') else ''
         
+        oid = o['id']
         action_html = ''
         if o['status'] == 'pending':
-            action_html = f'<button class="btn btn-paid" onclick="updateStatus({o[\'id\']}, \'paid\')">标记已支付</button>'
+            action_html = f'<button class="btn btn-paid" onclick="updateStatus({oid}, \'paid\')">标记已支付</button>'
         elif o['status'] == 'paid':
-            action_html = f'''
-            <div class="action-group">
-                <input type="text" id="tracking_{o['id']}" placeholder="物流单号" class="tracking-input">
-                <button class="btn btn-shipped" onclick="markShipped({o['id\']})">标记已发货</button>
-            </div>'''
+            action_html = f'<div class="action-group"><input type="text" id="tracking_{oid}" placeholder="物流单号" class="tracking-input"><button class="btn btn-shipped" onclick="markShipped({oid})">标记已发货</button></div>'
         elif o['status'] == 'shipped':
-            action_html = f'<button class="btn btn-completed" onclick="updateStatus({o[\'id\']}, \'completed\')">标记已完成</button>'
+            action_html = f'<button class="btn btn-completed" onclick="updateStatus({oid}, \'completed\')">标记已完成</button>'
         
-        products_lines = '\\n'.join([f"{p['name']} {p['count']}" for p in o['products']])
-        copy_text = f"收件人：{o['user_name']}\\n手机号码：{o['phone']}\\n所在地区：{o['address']}\\n详细地址：{o['door_number']}\\n{products_lines}"
+        products_lines = chr(10).join([f"{p['name']} {p['count']}" for p in o['products']])
+        copy_text = f"收件人：{o['user_name']}\n手机号码：{o['phone']}\n所在地区：{o['address']}\n详细地址：{o['door_number']}\n{products_lines}"
         
         rows_html += f'''
         <tr>
@@ -323,8 +320,7 @@ async function markShipped(orderId) {{
     else alert('操作失败');
 }}
 function copyOrderInfo(btn, text) {{
-    const formatted = text.replace(/\\\\n/g, '\\n');
-    navigator.clipboard.writeText(formatted).then(() => {{
+    navigator.clipboard.writeText(text).then(() => {{
         const original = btn.textContent;
         btn.textContent = '已复制';
         btn.style.background = '#4caf50';
@@ -334,7 +330,7 @@ function copyOrderInfo(btn, text) {{
         }}, 1500);
     }}).catch(() => {{
         const ta = document.createElement('textarea');
-        ta.value = formatted;
+        ta.value = text;
         document.body.appendChild(ta);
         ta.select();
         document.execCommand('copy');
