@@ -196,6 +196,18 @@ def get_openid():
     return jsonify({'openid': openid})
 
 
+@app.route('/api/userinfo', methods=['GET'])
+def get_userinfo():
+    openid = request.headers.get('X-WX-OPENID', '')
+    nickname = request.headers.get('X-WX-NICKNAME', '')
+    avatar_url = request.headers.get('X-WX-HEADIMGURL', '')
+    return jsonify({
+        'openid': openid,
+        'nickName': nickname or '用户',
+        'avatarUrl': avatar_url or 'https://cdn-icons-png.flaticon.com/128/2928/2928892.png'
+    })
+
+
 @app.route('/admin')
 def admin_page():
     conn = get_db()
