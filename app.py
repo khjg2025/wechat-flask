@@ -230,6 +230,20 @@ def admin_page():
     rows_html = ''
     for o in orders:
         products_str = '<br>'.join([f"{p['name']} x{p['count']}" for p in o['products']])
+        tracking_html = f'<br><small>物流单号: {o["tracking_no"]}</small>' if o.get('tracking_no') else ''
+        
+        action_html = ''
+        if o['status'] == 'pending':
+            action_html = f'<button class="btn btn-paid" onclick="updateStatus({o[\'id\']}, \'paid\')">标记已支付</button>'
+        elif o['status'] == 'paid':
+            action_html = f'''
+            <div class="action-group">
+                <input type="text" id="tracking_{o['id']}" placeholder="物流单号" class="tracking-input">
+                <button class="btn btn-shipped" onclick="markShipped({o['id\']})">标记已发货</button>
+            </div>'''
+        elif o['status'] == 'shipped':
+            action_html = f'<button class="btn btn-completed" onclick="updateStatus({o[\'id\']}, \'completed\')">标记已完成</button>'
+        
         rows_html += f'''
         <tr>
             <td>{o['id']}</td>
@@ -239,9 +253,9 @@ def admin_page():
             <td>{o['address']} {o['door_number']}</td>
             <td>{products_str}</td>
             <td>¥{o['final_price']}</td>
-            <td><span class="status {o['status']}">{status_map.get(o['status'], o['status'])}</span></td>
-            <td>{o['openid']}</td>
+            <td><span class="status {o['status']}">{status_map.get(o['status'], o['status'])}</span>{tracking_html}</td>
             <td>{o['remark']}</td>
+            <td>{action_html}</td>
         </tr>'''
 
     html = f'''<!DOCTYPE html>
@@ -264,6 +278,13 @@ def admin_page():
   .status.shipped {{ background: #9c27b0; }}
   .status.completed {{ background: #4caf50; }}
   .count {{ color: #888; margin-bottom: 10px; }}
+  .btn {{ padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; color: #fff; }}
+  .btn-paid {{ background: #4caf50; }}
+  .btn-shipped {{ background: #2196f3; }}
+  .btn-completed {{ background: #9e9e9e; }}
+  .btn:hover {{ opacity: 0.8; }}
+  .tracking-input {{ padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; width: 120px; }}
+  .action-group {{ display: flex; gap: 8px; align-items: center; }}
 </style>
 </head>
 <body>
@@ -272,10 +293,32 @@ def admin_page():
 <table>
 <tr>
   <th>ID</th><th>订单号</th><th>收货人</th><th>电话</th><th>地址</th>
-  <th>商品</th><th>合计</th><th>状态</th><th>OpenID</th><th>备注</th>
+  <th>商品</th><th>合计</th><th>状态</th><th>备注</th><th>操作</th>
 </tr>
 {rows_html}
 </table>
+<script>
+async function updateStatus(orderId, status) {{
+    const resp = await fetch(`/api/orders/${{orderId}}/status`, {{
+        method: 'PUT',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ status }})
+    }});
+    if ((await resp.json()).success) location.reload();
+    else alert('操作失败');
+}}
+async function markShipped(orderId) {{
+    const trackingNo = document.getElementById('tracking_' + orderId).value;
+    if (!trackingNo) {{ alert('请输入物流单号'); return; }}
+    const resp = await fetch(`/api/orders/${{orderId}}/status`, {{
+        method: 'PUT',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ status: 'shipped', tracking_no: trackingNo }})
+    }});
+    if ((await resp.json()).success) location.reload();
+    else alert('操作失败');
+}}
+</script>
 </body>
 </html>'''
     return html
