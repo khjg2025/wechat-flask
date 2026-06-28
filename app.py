@@ -109,24 +109,30 @@ def get_orders():
     page = int(request.args.get('page', 1))
     page_size = int(request.args.get('pageSize', 20))
     status = request.args.get('status', None)
+    openid = request.args.get('openid', None)
 
     try:
         conn = get_db()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        where = ''
+        where = []
         params = []
         if status:
-            where = 'WHERE status = %s'
+            where.append('status = %s')
             params.append(status)
+        if openid:
+            where.append('openid = %s')
+            params.append(openid)
 
-        cursor.execute(f'SELECT COUNT(*) as total FROM orders {where}', params)
+        where_sql = 'WHERE ' + ' AND '.join(where) if where else ''
+
+        cursor.execute(f'SELECT COUNT(*) as total FROM orders {where_sql}', params)
         total = cursor.fetchone()['total']
 
         params_for_query = params.copy()
         offset = (page - 1) * page_size
         params_for_query.extend([offset, page_size])
-        cursor.execute(f'SELECT * FROM orders {where} ORDER BY create_time DESC LIMIT %s, %s', params_for_query)
+        cursor.execute(f'SELECT * FROM orders {where_sql} ORDER BY create_time DESC LIMIT %s, %s', params_for_query)
         rows = cursor.fetchall()
 
         orders = []
@@ -177,6 +183,79 @@ def update_order_status(order_id):
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok'})
+
+
+@app.route('/admin')
+def admin_page():
+    conn = get_db()
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    cursor.execute('SELECT * FROM orders ORDER BY create_time DESC')
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    import json
+    orders = []
+    for row in rows:
+        row['products'] = json.loads(row['products']) if row['products'] else []
+        row['total_price'] = float(row['total_price'])
+        row['delivery_fee'] = float(row['delivery_fee'])
+        row['final_price'] = float(row['final_price'])
+        orders.append(row)
+
+    status_map = {'pending': '待处理', 'paid': '已支付', 'shipped': '已发货', 'completed': '已完成'}
+    rows_html = ''
+    for o in orders:
+        products_str = '<br>'.join([f"{p['name']} x{p['count']}" for p in o['products']])
+        rows_html += f'''
+        <tr>
+            <td>{o['id']}</td>
+            <td>{o['order_no']}</td>
+            <td>{o['user_name']}</td>
+            <td>{o['phone']}</td>
+            <td>{o['address']} {o['door_number']}</td>
+            <td>{products_str}</td>
+            <td>¥{o['final_price']}</td>
+            <td><span class="status {o['status']}">{status_map.get(o['status'], o['status'])}</span></td>
+            <td>{o['openid']}</td>
+            <td>{o['remark']}</td>
+        </tr>'''
+
+    html = f'''<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全部订单</title>
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{ font-family: -apple-system, sans-serif; background: #f5f5f5; padding: 20px; }}
+  h1 {{ color: #333; margin-bottom: 20px; }}
+  table {{ width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+  th {{ background: #ff6b35; color: #fff; padding: 12px 10px; text-align: left; font-size: 14px; }}
+  td {{ padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }}
+  tr:hover {{ background: #f9f9f9; }}
+  .status {{ padding: 4px 10px; border-radius: 12px; font-size: 12px; color: #fff; }}
+  .status.pending {{ background: #ff9800; }}
+  .status.paid {{ background: #2196f3; }}
+  .status.shipped {{ background: #9c27b0; }}
+  .status.completed {{ background: #4caf50; }}
+  .count {{ color: #888; margin-bottom: 10px; }}
+</style>
+</head>
+<body>
+<h1>全部订单</h1>
+<p class="count">共 {len(orders)} 条订单</p>
+<table>
+<tr>
+  <th>ID</th><th>订单号</th><th>收货人</th><th>电话</th><th>地址</th>
+  <th>商品</th><th>合计</th><th>状态</th><th>OpenID</th><th>备注</th>
+</tr>
+{rows_html}
+</table>
+</body>
+</html>'''
+    return html
 
 
 if __name__ == '__main__':
