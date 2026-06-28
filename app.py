@@ -48,6 +48,7 @@ def init_db():
                 address VARCHAR(255) DEFAULT '',
                 door_number VARCHAR(64) DEFAULT '',
                 remark VARCHAR(255) DEFAULT '',
+                tracking_no VARCHAR(64) DEFAULT '',
                 status VARCHAR(20) DEFAULT 'pending',
                 create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
                 update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -167,11 +168,15 @@ def get_orders():
 def update_order_status(order_id):
     data = request.get_json()
     status = data.get('status', '')
+    tracking_no = data.get('tracking_no', '')
 
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('UPDATE orders SET status = %s WHERE id = %s', (status, order_id))
+        if tracking_no:
+            cursor.execute('UPDATE orders SET status = %s, tracking_no = %s WHERE id = %s', (status, tracking_no, order_id))
+        else:
+            cursor.execute('UPDATE orders SET status = %s WHERE id = %s', (status, order_id))
         conn.commit()
         cursor.close()
         conn.close()
