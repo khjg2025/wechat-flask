@@ -241,8 +241,9 @@ def admin_page():
         elif o['status'] == 'shipped':
             action_html = f'<button class="btn btn-completed" onclick="updateStatus({oid}, \'completed\')">标记已完成</button>'
         
-        products_lines = chr(10).join([f"{p['name']} {p['count']}" for p in o['products']])
+        products_lines = '\n'.join([f"{p['name']} {p['count']}" for p in o['products']])
         copy_text = f"收件人：{o['user_name']}\n手机号码：{o['phone']}\n所在地区：{o['address']}\n详细地址：{o['door_number']}\n{products_lines}"
+        copy_text_escaped = copy_text.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '\\n')
         
         rows_html += f'''
         <tr>
@@ -255,7 +256,7 @@ def admin_page():
             <td>¥{o['final_price']}</td>
             <td><span class="status {o['status']}">{status_map.get(o['status'], o['status'])}</span>{tracking_html}</td>
             <td>{o['remark']}</td>
-            <td><button class="btn btn-copy" onclick="copyOrderInfo(this, '{copy_text}')">复制</button>{action_html}</td>
+            <td><button class="btn btn-copy" onclick="copyOrderInfo(this, '{copy_text_escaped}')">复制</button>{action_html}</td>
         </tr>'''
 
     html = f'''<!DOCTYPE html>
