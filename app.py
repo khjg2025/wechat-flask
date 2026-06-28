@@ -208,7 +208,7 @@ def get_userinfo():
     })
 
 
-@app.route('/admin')
+@app.route('/api/admin')
 def admin_page():
     conn = get_db()
     cursor = conn.cursor(pymysql.cursors.DictCursor)
