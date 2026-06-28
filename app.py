@@ -244,6 +244,9 @@ def admin_page():
         elif o['status'] == 'shipped':
             action_html = f'<button class="btn btn-completed" onclick="updateStatus({o[\'id\']}, \'completed\')">标记已完成</button>'
         
+        products_lines = '\\n'.join([f"{p['name']} {p['count']}" for p in o['products']])
+        copy_text = f"收件人：{o['user_name']}\\n手机号码：{o['phone']}\\n所在地区：{o['address']}\\n详细地址：{o['door_number']}\\n{products_lines}"
+        
         rows_html += f'''
         <tr>
             <td>{o['id']}</td>
@@ -255,7 +258,7 @@ def admin_page():
             <td>¥{o['final_price']}</td>
             <td><span class="status {o['status']}">{status_map.get(o['status'], o['status'])}</span>{tracking_html}</td>
             <td>{o['remark']}</td>
-            <td>{action_html}</td>
+            <td><button class="btn btn-copy" onclick="copyOrderInfo(this, '{copy_text}')">复制</button>{action_html}</td>
         </tr>'''
 
     html = f'''<!DOCTYPE html>
@@ -283,6 +286,7 @@ def admin_page():
   .btn-shipped {{ background: #2196f3; }}
   .btn-completed {{ background: #9e9e9e; }}
   .btn:hover {{ opacity: 0.8; }}
+  .btn-copy {{ background: #607d8b; margin-right: 8px; }}
   .tracking-input {{ padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; width: 120px; }}
   .action-group {{ display: flex; gap: 8px; align-items: center; }}
 </style>
@@ -317,6 +321,32 @@ async function markShipped(orderId) {{
     }});
     if ((await resp.json()).success) location.reload();
     else alert('操作失败');
+}}
+function copyOrderInfo(btn, text) {{
+    const formatted = text.replace(/\\\\n/g, '\\n');
+    navigator.clipboard.writeText(formatted).then(() => {{
+        const original = btn.textContent;
+        btn.textContent = '已复制';
+        btn.style.background = '#4caf50';
+        setTimeout(() => {{
+            btn.textContent = original;
+            btn.style.background = '';
+        }}, 1500);
+    }}).catch(() => {{
+        const ta = document.createElement('textarea');
+        ta.value = formatted;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        const original = btn.textContent;
+        btn.textContent = '已复制';
+        btn.style.background = '#4caf50';
+        setTimeout(() => {{
+            btn.textContent = original;
+            btn.style.background = '';
+        }}, 1500);
+    }});
 }}
 </script>
 </body>
