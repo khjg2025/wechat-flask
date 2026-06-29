@@ -1,12 +1,17 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response, redirect
 import pymysql
 from datetime import datetime
 import os
 import random
 import string
 import json
+import hashlib
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'hengge2025secret')
+
+ADMIN_USER = os.environ.get('ADMIN_USER', 'heng')
+ADMIN_PASS = os.environ.get('ADMIN_PASS', 'heng')
 
 DB_HOST = os.environ.get('MYSQL_HOST', '10.13.103.5')
 DB_PORT = int(os.environ.get('MYSQL_PORT', 3306))
@@ -193,6 +198,29 @@ def update_order_status(order_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/orders/<order_id>', methods=['DELETE'])
+def delete_order(order_id):
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM orders WHERE id = %s', (order_id,))
+        conn.commit()
+        affected = cursor.rowcount
+        cursor.close()
+        conn.close()
+        return jsonify({'success': True, 'affected': affected})
+    except Exception as e:
+        print(f'删除订单失败: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/logout')
+def admin_logout():
+    resp = make_response(redirect('/api/admin/login'))
+    resp.delete_cookie('admin_token')
+    return resp
+
+
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok'})
@@ -216,8 +244,74 @@ def get_userinfo():
     })
 
 
+def check_auth(token):
+    return token == hashlib.md5((ADMIN_USER + ADMIN_PASS).encode()).hexdigest()
+
+
+@app.route('/api/admin/login', methods=['GET', 'POST'])
+def admin_login():
+    if request.method == 'GET':
+        return '''<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>后台登录</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #f5f5f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  .login-box { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 360px; }
+  h2 { text-align: center; color: #ff6b35; margin-bottom: 30px; }
+  .form-group { margin-bottom: 20px; }
+  label { display: block; margin-bottom: 8px; color: #555; font-size: 14px; }
+  input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; outline: none; }
+  input:focus { border-color: #ff6b35; }
+  button { width: 100%; padding: 14px; background: #ff6b35; color: #fff; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin-top: 10px; }
+  button:hover { background: #e55a2b; }
+  .error { color: #f44336; text-align: center; margin-top: 10px; display: none; }
+</style>
+</head>
+<body>
+<div class="login-box">
+  <h2>哼哥牛肉丸 · 后台管理</h2>
+  <form method="POST" action="/api/admin/login">
+    <div class="form-group">
+      <label>账号</label>
+      <input type="text" name="username" placeholder="请输入账号" required>
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" name="password" placeholder="请输入密码" required>
+    </div>
+    <button type="submit">登录</button>
+  </form>
+</div>
+</body>
+</html>'''
+    
+    username = request.form.get('username', '')
+    password = request.form.get('password', '')
+    
+    if username == ADMIN_USER and password == ADMIN_PASS:
+        token = hashlib.md5((ADMIN_USER + ADMIN_PASS).encode()).hexdigest()
+        resp = make_response(redirect('/api/admin'))
+        resp.set_cookie('admin_token', token, max_age=86400)
+        return resp
+    
+    return '''<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>登录失败</title>
+<style>body{font-family:-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5;}
+.box{background:#fff;padding:40px;border-radius:12px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.1);}
+h2{color:#f44336;margin-bottom:16px;}a{color:#ff6b35;text-decoration:none;}</style></head>
+<body><div class="box"><h2>账号或密码错误</h2><p><a href="/api/admin/login">返回重新登录</a></p></div></body></html>'''
+
+
 @app.route('/api/admin')
 def admin_page():
+    token = request.cookies.get('admin_token', '')
+    if not check_auth(token):
+        return redirect('/api/admin/login')
+    
     conn = get_db()
     cursor = conn.cursor(pymysql.cursors.DictCursor)
     cursor.execute('SELECT * FROM orders ORDER BY create_time DESC')
@@ -225,7 +319,6 @@ def admin_page():
     cursor.close()
     conn.close()
 
-    import json
     orders = []
     for row in rows:
         row['products'] = json.loads(row['products']) if row['products'] else []
@@ -264,7 +357,7 @@ def admin_page():
             <td>¥{o['final_price']}</td>
             <td><span class="status {o['status']}">{status_map.get(o['status'], o['status'])}</span>{tracking_html}</td>
             <td>{o['remark']}</td>
-            <td><button class="btn btn-copy" onclick="copyOrderInfo(this, '{copy_text_escaped}')">复制</button>{action_html}</td>
+            <td><button class="btn btn-copy" onclick="copyOrderInfo(this, '{copy_text_escaped}')">复制</button>{action_html}<button class="btn btn-delete" onclick="deleteOrder({oid})">删除</button></td>
         </tr>'''
 
     html = f'''<!DOCTYPE html>
@@ -293,12 +386,14 @@ def admin_page():
   .btn-completed {{ background: #9e9e9e; }}
   .btn:hover {{ opacity: 0.8; }}
   .btn-copy {{ background: #607d8b; margin-right: 8px; }}
+  .btn-delete {{ background: #f44336; margin-left: 8px; }}
+  .btn-delete:hover {{ background: #d32f2f; }}
   .tracking-input {{ padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; width: 120px; }}
   .action-group {{ display: flex; gap: 8px; align-items: center; }}
 </style>
 </head>
 <body>
-<h1>全部订单</h1>
+<h1>全部订单 <a href="/api/admin/logout" style="float:right;font-size:14px;color:#999;text-decoration:none;">退出登录</a></h1>
 <p class="count">共 {len(orders)} 条订单</p>
 <table>
 <tr>
@@ -329,6 +424,19 @@ async function markShipped(orderId) {{
         const result = await resp.json();
         if (result.success) location.reload();
         else alert('操作失败: ' + (result.error || '未知错误'));
+    }} catch (e) {{
+        alert('请求失败: ' + e.message);
+    }}
+}}
+async function deleteOrder(orderId) {{
+    if (!confirm('确定要删除此订单吗？')) return;
+    try {{
+        const resp = await fetch(`/api/orders/${{orderId}}`, {{
+            method: 'DELETE'
+        }});
+        const result = await resp.json();
+        if (result.success) location.reload();
+        else alert('删除失败: ' + (result.error || '未知错误'));
     }} catch (e) {{
         alert('请求失败: ' + e.message);
     }}
