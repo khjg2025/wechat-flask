@@ -55,6 +55,12 @@ def init_db():
             )
         ''')
         conn.commit()
+        try:
+            cursor.execute('ALTER TABLE orders ADD COLUMN tracking_no VARCHAR(64) DEFAULT ""')
+            conn.commit()
+            print('已添加 tracking_no 列')
+        except Exception:
+            pass
         cursor.close()
         conn.close()
         print('数据表 orders 就绪')
@@ -178,10 +184,12 @@ def update_order_status(order_id):
         else:
             cursor.execute('UPDATE orders SET status = %s WHERE id = %s', (status, order_id))
         conn.commit()
+        affected = cursor.rowcount
         cursor.close()
         conn.close()
-        return jsonify({'success': True})
+        return jsonify({'success': True, 'affected': affected})
     except Exception as e:
+        print(f'更新订单状态失败: {e}')
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -312,13 +320,18 @@ async function updateStatus(orderId, status) {{
 async function markShipped(orderId) {{
     const trackingNo = document.getElementById('tracking_' + orderId).value;
     if (!trackingNo) {{ alert('请输入物流单号'); return; }}
-    const resp = await fetch(`/api/orders/${{orderId}}/status`, {{
-        method: 'PUT',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{ status: 'shipped', tracking_no: trackingNo }})
-    }});
-    if ((await resp.json()).success) location.reload();
-    else alert('操作失败');
+    try {{
+        const resp = await fetch(`/api/orders/${{orderId}}/status`, {{
+            method: 'PUT',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ status: 'shipped', tracking_no: trackingNo }})
+        }});
+        const result = await resp.json();
+        if (result.success) location.reload();
+        else alert('操作失败: ' + (result.error || '未知错误'));
+    }} catch (e) {{
+        alert('请求失败: ' + e.message);
+    }}
 }}
 function copyOrderInfo(btn, text) {{
     navigator.clipboard.writeText(text).then(() => {{
